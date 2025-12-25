@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>打卡表</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="app" class="app" aria-hidden="true">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-title">打卡表</div>
+          <div class="brand-subtitle" id="subtitle"></div>
+        </div>
+        <nav class="tabs" aria-label="页面">
+          <button class="tab-btn is-active" type="button" data-tab="checkin">打卡</button>
+          <button class="tab-btn" type="button" data-tab="stats">统计</button>
+          <button class="tab-btn" type="button" data-tab="settings">设置</button>
+        </nav>
+        <div class="spacer"></div>
+        <button class="ghost-btn" id="logoutBtn" type="button" title="退出">退出</button>
+      </header>
+
+      <main class="main">
+        <section class="tab-panel" id="tab-checkin">
+          <div class="toolbar">
+            <div class="segmented" role="group" aria-label="显示方式">
+              <button class="segmented-btn is-active" type="button" data-view="week">按周</button>
+              <button class="segmented-btn" type="button" data-view="day">按天</button>
+            </div>
+
+            <div class="date-nav" aria-label="日期导航">
+              <button class="icon-btn" id="prevBtn" type="button" title="上一段">◀</button>
+              <input class="date-input" id="focusDate" type="date" />
+              <button class="icon-btn" id="nextBtn" type="button" title="下一段">▶</button>
+              <button class="ghost-btn" id="todayBtn" type="button">今天</button>
+            </div>
+
+            <div class="save-state" id="saveState" aria-live="polite"></div>
+          </div>
+
+          <div class="grid-wrap">
+            <div id="gridContainer"></div>
+          </div>
+        </section>
+
+        <section class="tab-panel is-hidden" id="tab-stats">
+          <div class="stats-layout">
+            <section class="card">
+              <div class="card-header">
+                <h2 class="card-title">项目纵向</h2>
+                <div class="card-actions">
+                  <select id="statsProjectSelect" class="select"></select>
+                </div>
+              </div>
+              <div class="card-body">
+                <canvas id="projectChart" class="chart" height="220"></canvas>
+                <div id="projectStatsSummary" class="muted"></div>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="card-header">
+                <h2 class="card-title">时间横向</h2>
+                <div class="card-actions range-controls">
+                  <input id="rangeStart" class="date-input" type="date" />
+                  <span class="muted">到</span>
+                  <input id="rangeEnd" class="date-input" type="date" />
+                  <button id="applyRange" class="primary-btn" type="button">应用</button>
+                </div>
+              </div>
+              <div class="card-body">
+                <div id="rangeSummary" class="summary"></div>
+                <canvas id="rangeChart" class="chart" height="220"></canvas>
+                <div id="perProjectAverages" class="list"></div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="tab-panel is-hidden" id="tab-settings">
+          <section class="card">
+            <div class="card-header">
+              <h2 class="card-title">数据</h2>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <button id="exportBtn" class="primary-btn" type="button">导出 JSON</button>
+                <label class="file-btn">
+                  导入 JSON
+                  <input id="importFile" type="file" accept="application/json" hidden />
+                </label>
+                <button id="clearLocalBtn" class="danger-btn" type="button">清空本地缓存</button>
+              </div>
+              <div class="muted">
+                说明：导入会覆盖当前数据（建议先导出备份）。如果云端不可用，会自动退回到本地保存。
+              </div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-header">
+              <h2 class="card-title">安全</h2>
+            </div>
+            <div class="card-body muted">
+              单用户密码由 Cloudflare Pages Functions 校验（建议用随机强密码）。本页面不会把密码写入本地持久存储，刷新后需要重新输入。
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div id="loginOverlay" class="overlay">
+      <div class="login-card" role="dialog" aria-modal="true" aria-label="登录">
+        <h1 class="login-title">打卡表</h1>
+        <div class="muted">输入密码后才能读取/保存数据。</div>
+        <div class="login-row">
+          <input id="passwordInput" class="text-input" type="password" placeholder="密码" autocomplete="current-password" />
+          <button id="loginBtn" class="primary-btn" type="button">进入</button>
+        </div>
+        <div id="loginError" class="error" role="alert"></div>
+        <details class="muted">
+          <summary>离线说明</summary>
+          如果未配置 Cloudflare KV 或接口不可用，仍可在本地浏览器使用（但不同设备无法同步）。
+        </details>
+      </div>
+    </div>
+
+    <div id="editorOverlay" class="overlay is-hidden">
+      <div class="editor-card" role="dialog" aria-modal="true" aria-label="打卡编辑">
+        <div class="editor-header">
+          <div>
+            <div id="editorTitle" class="editor-title"></div>
+            <div id="editorSubtitle" class="muted"></div>
+          </div>
+          <button id="editorCloseBtn" class="icon-btn" type="button" title="关闭">✕</button>
+        </div>
+
+        <div class="editor-body">
+          <div class="status-grid" role="group" aria-label="状态">
+            <button type="button" class="status-btn status-satisfied" data-status="satisfied">满意</button>
+            <button type="button" class="status-btn status-ok" data-status="ok">一般</button>
+            <button type="button" class="status-btn status-unsatisfied" data-status="unsatisfied">不满意</button>
+            <button type="button" class="status-btn status-missed" data-status="missed">未完成</button>
+          </div>
+
+          <label class="field">
+            <div class="field-label">注释</div>
+            <textarea id="noteInput" class="textarea" rows="3" placeholder="可选：记录一下原因/改进点"></textarea>
+          </label>
+
+          <div class="field">
+            <div class="field-label">照片（可选）</div>
+            <div class="photo-row">
+              <label class="file-btn">
+                选择照片
+                <input id="photoInput" type="file" accept="image/*" hidden />
+              </label>
+              <button id="removePhotoBtn" class="ghost-btn" type="button">移除照片</button>
+            </div>
+            <div id="photoPreviewWrap" class="photo-preview-wrap is-hidden">
+              <img id="photoPreview" class="photo-preview" alt="照片预览" />
+            </div>
+            <label class="field subfield">
+              <div class="field-label">或填图片链接</div>
+              <input id="photoUrlInput" class="text-input" type="url" placeholder="https://..." />
+            </label>
+          </div>
+        </div>
+
+        <div class="editor-footer">
+          <button id="clearEntryBtn" class="danger-btn" type="button">清空该格</button>
+          <div class="spacer"></div>
+          <button id="saveEntryBtn" class="primary-btn" type="button">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
+
