@@ -1,6 +1,7 @@
 import { DEFAULT_PROJECT_CATEGORIES } from "./projects.js";
 
 const END_DATE_ISO = "2026-01-30";
+const START_DATE_ISO = "2025-12-26";
 const API_URL = "/api/data";
 
 const LOCAL_CACHE_KEY = "checkin_cache_v1";
@@ -8,9 +9,9 @@ const LOCAL_AUTH_HASH_KEY = "checkin_local_auth_hash_v1";
 const SESSION_AUTH_HASH_KEY = "checkin_session_auth_hash_v1";
 
 const STATUS_DEFS = [
-  { key: "satisfied", label: "满意", short: "满", score: 3, className: "status-satisfied" },
-  { key: "ok", label: "一般", short: "般", score: 2, className: "status-ok" },
-  { key: "unsatisfied", label: "不满意", short: "不", score: 1, className: "status-unsatisfied" },
+  { key: "satisfied", label: "满意", short: "满", score: 100, className: "status-satisfied" },
+  { key: "ok", label: "一般", short: "般", score: 50, className: "status-ok" },
+  { key: "unsatisfied", label: "不满意", short: "不", score: 25, className: "status-unsatisfied" },
   { key: "missed", label: "未完成", short: "未", score: 0, className: "status-missed" },
 ];
 
@@ -81,7 +82,7 @@ const elRangeSummary = document.getElementById("rangeSummary");
 const elRangeChart = document.getElementById("rangeChart");
 const elPerProjectAverages = document.getElementById("perProjectAverages");
 
-let viewMode = "week";
+let viewMode = window.matchMedia?.("(max-width: 720px)")?.matches ? "day" : "week";
 let focusDateIso = toISODateString(startOfToday());
 let authHash = sessionStorage.getItem(SESSION_AUTH_HASH_KEY) || null;
 let storageMode = "cloud";
@@ -93,6 +94,9 @@ let pendingSave = false;
 
 let editorContext = null;
 let editorDraft = null;
+
+let derivedUpdatedAt = null;
+let entryDatesByProject = new Map();
 
 init();
 
@@ -134,10 +138,15 @@ function initViewToggle() {
   for (const btn of elViewButtons) {
     btn.addEventListener("click", () => {
       viewMode = btn.dataset.view === "day" ? "day" : "week";
-      for (const b of elViewButtons) b.classList.toggle("is-active", b === btn);
+      syncViewButtons();
       renderAll();
     });
   }
+  syncViewButtons();
+}
+
+function syncViewButtons() {
+  for (const b of elViewButtons) b.classList.toggle("is-active", b.dataset.view === viewMode);
 }
 
 function initDateNav() {
@@ -343,7 +352,8 @@ async function loadAll({ allowOffline } = { allowOffline: false }) {
 function ensureMeta() {
   if (!data.meta) data.meta = {};
   if (!data.meta.endDate) data.meta.endDate = END_DATE_ISO;
-  if (!data.meta.startDate) data.meta.startDate = toISODateString(startOfToday());
+  if (!data.meta.startDate) data.meta.startDate = START_DATE_ISO;
+  if (data.meta.startDate < START_DATE_ISO) data.meta.startDate = START_DATE_ISO;
   if (!data.meta.createdAt) data.meta.createdAt = new Date().toISOString();
   if (!data.updatedAt) data.updatedAt = new Date().toISOString();
 
@@ -357,6 +367,8 @@ function renderAll() {
 
   const startIso = data.meta.startDate;
   const endIso = data.meta.endDate;
+  const todayIso = toISODateString(startOfToday());
+  const defaultEndIso = maxIso(startIso, minIso(endIso, todayIso));
 
   const startDate = parseISODate(startIso);
   const endDate = parseISODate(endIso);
@@ -374,9 +386,20 @@ function renderAll() {
 }
 
 function renderGrid() {
-  const dateList = viewMode === "day" ? [parseISODate(focusDateIso)] : getWeekDates(parseISODate(focusDateIso));
+  let dateList = viewMode === "day" ? [parseISODate(focusDateIso)] : getWeekDates(parseISODate(focusDateIso));
   const startDate = parseISODate(data.meta.startDate);
   const endDate = parseISODate(data.meta.endDate);
+
+  if (viewMode === "week") {
+    dateList = dateList.filter((d) => d.getTime() >= startDate.getTime() && d.getTime() <= endDate.getTime());
+  }
+  const todayIso = toISODateString(startOfToday());
+  const completionDates = viewMode === "week" ? dateList : getWeekDates(parseISODate(focusDateIso));
+  const completionStartIso = toISODateString(completionDates[0]);
+  const completionEndIso = toISODateString(completionDates[completionDates.length - 1]);
+  const completionEffectiveStartIso = maxIso(completionStartIso, data.meta.startDate);
+  const completionEffectiveEndIso = minIso(minIso(completionEndIso, todayIso), data.meta.endDate);
+  const completionDayCount = inclusiveDayCount(completionEffectiveStartIso, completionEffectiveEndIso);
 
   const table = document.createElement("table");
   table.className = "table";
@@ -420,18 +443,48 @@ function renderGrid() {
       tdName.className = "sticky-col col-project";
       const nameWrap = document.createElement("div");
       nameWrap.className = "project-name";
+      const textWrap = document.createElement("div");
+      textWrap.className = "project-text";
       const link = document.createElement("button");
       link.type = "button";
       link.className = "project-link";
       link.textContent = proj.name;
       link.addEventListener("click", () => openProjectStats(proj.id));
-      nameWrap.appendChild(link);
+      textWrap.appendChild(link);
+      if (proj.quantity) {
+        const qty = document.createElement("div");
+        qty.className = "project-qty";
+        qty.textContent = proj.quantity;
+        textWrap.appendChild(qty);
+      }
+      nameWrap.appendChild(textWrap);
       tdName.appendChild(nameWrap);
       tr.appendChild(tdName);
 
       const tdFreq = document.createElement("td");
-      tdFreq.className = "sticky-col second col-freq muted";
-      tdFreq.textContent = proj.frequency || "";
+      tdFreq.className = "sticky-col second col-freq";
+      const intervalDays = intervalDaysFromFrequencyText(proj.frequencyDays ?? proj.frequency);
+      const expected = expectedSlotCount(completionDayCount, intervalDays);
+      const completed = completionDates.reduce((acc, d) => {
+        const iso = toISODateString(d);
+        if (iso < completionEffectiveStartIso) return acc;
+        if (iso > completionEffectiveEndIso) return acc;
+        const entry = getEntry(iso, proj.id);
+        if (!entry?.status) return acc;
+        return entry.status === "missed" ? acc : acc + 1;
+      }, 0);
+
+      const freqMain = document.createElement("div");
+      freqMain.className = "freq-main";
+      freqMain.textContent = frequencyLabelFromDays(intervalDays);
+
+      const freqSub = document.createElement("div");
+      freqSub.className = "freq-sub";
+      freqSub.textContent =
+        expected > 0 ? `该周完成 ${completed}/${expected}（${Math.round((completed / expected) * 100)}%）` : "未开始";
+
+      tdFreq.appendChild(freqMain);
+      tdFreq.appendChild(freqSub);
       tr.appendChild(tdFreq);
 
       for (const d of dateList) {
@@ -441,17 +494,24 @@ function renderGrid() {
         const entry = getEntry(iso, proj.id);
         const statusKey = entry?.status || "";
         const statusDef = STATUS_BY_KEY.get(statusKey);
+        const lockInfo = !entry && inRange ? getFrequencyLockInfo(proj.id, iso) : null;
 
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = `cell-btn ${statusDef?.className || "status-empty"}`;
-        btn.disabled = !inRange;
-        btn.title = inRange ? "点击打卡" : "不在范围内";
-        btn.addEventListener("click", () => openEditor(iso, proj.id));
+        btn.disabled = !inRange || !!lockInfo;
+        btn.title = !inRange
+          ? "不在范围内"
+          : lockInfo
+            ? `频率限制：已在 ${lockInfo.lastIso} 打卡，下一次 ${lockInfo.nextIso}`
+            : entry
+              ? "点击修改"
+              : "点击打卡（默认满意，再点可改）";
+        btn.addEventListener("click", () => handleCellClick(iso, proj.id));
 
         const tag = document.createElement("span");
         tag.className = "cell-tag";
-        tag.textContent = statusDef ? statusDef.short : "—";
+        tag.textContent = statusDef ? statusDef.short : lockInfo ? "锁" : "—";
         btn.appendChild(tag);
 
         const meta = document.createElement("span");
@@ -478,7 +538,7 @@ function renderGrid() {
     const iso = toISODateString(d);
     const avg = computeAverageScoreForDate(iso);
     const td = document.createElement("td");
-    td.textContent = avg == null ? "—" : avg.toFixed(2);
+    td.textContent = avg == null ? "—" : String(Math.round(avg));
     avgRow.appendChild(td);
   }
 
@@ -510,7 +570,7 @@ function renderStats() {
   elRangeEnd.max = endIso;
 
   if (!elRangeStart.value) elRangeStart.value = startIso;
-  if (!elRangeEnd.value) elRangeEnd.value = endIso;
+  if (!elRangeEnd.value) elRangeEnd.value = defaultEndIso;
 
   const rangeStartIso = clampIso(elRangeStart.value || startIso, startIso, endIso);
   const rangeEndIso = clampIso(elRangeEnd.value || endIso, startIso, endIso);
@@ -527,12 +587,26 @@ function renderProjectChart(projectId) {
   const proj = PROJECT_BY_ID.get(projectId);
   if (!proj) return;
 
-  const dateIsos = getDateIsoList(data.meta.startDate, data.meta.endDate);
+  const todayIso = toISODateString(startOfToday());
+  const endIso = minIso(data.meta.endDate, todayIso);
+  const dateIsos = getDateIsoList(data.meta.startDate, endIso);
   const values = dateIsos.map((iso) => scoreFromEntry(getEntry(iso, projectId)));
-  drawLineChart(elProjectChart, values, { min: 0, max: 3, color: "rgba(122, 162, 255, 0.95)" });
+  drawLineChart(elProjectChart, values, { min: 0, max: 100, color: "rgba(122, 162, 255, 0.95)" });
 
   const stats = summarizeScores(values);
-  elProjectStatsSummary.textContent = `${proj.categoryName} / ${proj.name} · 已打卡 ${stats.count} 天 · 平均 ${stats.avg == null ? "—" : stats.avg.toFixed(2)}`;
+  const intervalDays = intervalDaysFromFrequencyText(proj.frequencyDays ?? proj.frequency);
+  const dayCount = inclusiveDayCount(data.meta.startDate, endIso);
+  const expected = expectedSlotCount(dayCount, intervalDays);
+  const completed = dateIsos.reduce((acc, iso) => {
+    const entry = getEntry(iso, projectId);
+    if (!entry?.status) return acc;
+    return entry.status === "missed" ? acc : acc + 1;
+  }, 0);
+
+  const completionText =
+    expected > 0 ? `完成 ${completed}/${expected}（${Math.round((completed / expected) * 100)}%）` : "未开始";
+
+  elProjectStatsSummary.textContent = `${proj.categoryName} / ${proj.name} · ${completionText} · 平均 ${stats.avg == null ? "—" : Math.round(stats.avg)}`;
 }
 
 function renderRangeChart(rangeStartIso, rangeEndIso) {
@@ -540,21 +614,60 @@ function renderRangeChart(rangeStartIso, rangeEndIso) {
   const values = dateIsos.map((iso) => computeAverageScoreForDate(iso));
 
   const summary = summarizeScores(values);
+  const todayIso = toISODateString(startOfToday());
+  const effectiveEndIso = minIso(rangeEndIso, todayIso);
+  const dayCount = inclusiveDayCount(rangeStartIso, effectiveEndIso);
+
+  let expectedTasks = 0;
+  let completedTasks = 0;
+  if (dayCount > 0) {
+    const dateIsosPast = getDateIsoList(rangeStartIso, effectiveEndIso);
+    for (const p of PROJECTS) {
+      expectedTasks += expectedSlotCount(dayCount, intervalDaysFromFrequencyText(p.frequencyDays ?? p.frequency));
+      for (const iso of dateIsosPast) {
+        const entry = getEntry(iso, p.id);
+        if (!entry?.status) continue;
+        if (entry.status !== "missed") completedTasks += 1;
+      }
+    }
+  }
+
   elRangeSummary.innerHTML = "";
   elRangeSummary.appendChild(makePill(`范围：${rangeStartIso} ～ ${rangeEndIso}`));
   elRangeSummary.appendChild(makePill(`有数据天数：${summary.count}/${dateIsos.length}`));
-  elRangeSummary.appendChild(makePill(`平均满意度：${summary.avg == null ? "—" : summary.avg.toFixed(2)}`));
+  elRangeSummary.appendChild(
+    makePill(
+      expectedTasks > 0
+        ? `完成率：${completedTasks}/${expectedTasks}（${Math.round((completedTasks / expectedTasks) * 100)}%）`
+        : "未开始",
+    ),
+  );
+  elRangeSummary.appendChild(makePill(`平均满意度：${summary.avg == null ? "—" : Math.round(summary.avg)}`));
 
-  drawLineChart(elRangeChart, values, { min: 0, max: 3, color: "rgba(29, 185, 84, 0.9)" });
+  drawLineChart(elRangeChart, values, { min: 0, max: 100, color: "rgba(29, 185, 84, 0.9)" });
 }
 
 function renderPerProjectAverages(rangeStartIso, rangeEndIso) {
-  const dateIsos = getDateIsoList(rangeStartIso, rangeEndIso);
+  const todayIso = toISODateString(startOfToday());
+  const effectiveEndIso = minIso(rangeEndIso, todayIso);
+  const dayCount = inclusiveDayCount(rangeStartIso, effectiveEndIso);
+  const dateIsosPast = dayCount > 0 ? getDateIsoList(rangeStartIso, effectiveEndIso) : [];
 
   const rows = PROJECTS.map((p) => {
-    const scores = dateIsos.map((iso) => scoreFromEntry(getEntry(iso, p.id)));
+    const intervalDays = intervalDaysFromFrequencyText(p.frequencyDays ?? p.frequency);
+    const expected = expectedSlotCount(dayCount, intervalDays);
+
+    let completed = 0;
+    const scores = [];
+    for (const iso of dateIsosPast) {
+      const entry = getEntry(iso, p.id);
+      const score = scoreFromEntry(entry);
+      if (score == null) continue;
+      scores.push(score);
+      if (entry?.status && entry.status !== "missed") completed += 1;
+    }
     const { avg, count } = summarizeScores(scores);
-    return { project: p, avg, count, total: dateIsos.length };
+    return { project: p, avg, count, completed, expected };
   }).sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1));
 
   elPerProjectAverages.innerHTML = "";
@@ -568,11 +681,14 @@ function renderPerProjectAverages(rangeStartIso, rangeEndIso) {
 
     const score = document.createElement("div");
     score.className = "pill";
-    score.textContent = `平均 ${r.avg == null ? "—" : r.avg.toFixed(2)}`;
+    score.textContent = `平均 ${r.avg == null ? "—" : Math.round(r.avg)}`;
 
     const count = document.createElement("div");
     count.className = "pill";
-    count.textContent = `打卡 ${r.count}/${r.total}`;
+    count.textContent =
+      r.expected > 0
+        ? `完成 ${r.completed}/${r.expected}（${Math.round((r.completed / r.expected) * 100)}%）`
+        : "未开始";
 
     line.appendChild(name);
     line.appendChild(score);
@@ -588,7 +704,7 @@ function openEditor(dateIso, projectId) {
 
   const existing = getEntry(dateIso, projectId);
   editorDraft = {
-    status: existing?.status || "missed",
+    status: existing?.status || "satisfied",
     note: existing?.note || "",
     photoDataUrl: existing?.photoDataUrl || "",
     photoUrl: existing?.photoUrl || "",
@@ -599,6 +715,15 @@ function openEditor(dateIso, projectId) {
 
   syncEditorUI();
   elEditorOverlay.classList.remove("is-hidden");
+}
+
+function handleCellClick(dateIso, projectId) {
+  const existing = getEntry(dateIso, projectId);
+  if (!existing) {
+    upsertEntry(dateIso, projectId, { status: "satisfied", note: "", photoDataUrl: "", photoUrl: "" });
+    return;
+  }
+  openEditor(dateIso, projectId);
 }
 
 function syncEditorUI() {
@@ -762,7 +887,7 @@ function createEmptyData() {
   return {
     version: 1,
     meta: {
-      startDate: null,
+      startDate: START_DATE_ISO,
       endDate: END_DATE_ISO,
       createdAt: new Date().toISOString(),
     },
@@ -797,6 +922,77 @@ function makePill(text) {
   span.className = "pill";
   span.textContent = text;
   return span;
+}
+
+function intervalDaysFromFrequencyText(freqOrDays) {
+  if (typeof freqOrDays === "number" && Number.isFinite(freqOrDays)) return Math.max(1, Math.round(freqOrDays));
+  const text = String(freqOrDays || "").trim();
+  if (!text) return 1;
+  if (text.includes("一周") || text.includes("每周")) return 7;
+  if (text.includes("两天") || text.includes("每两天")) return 2;
+  if (text.includes("每天") || text.includes("一天") || text.includes("每日")) return 1;
+  return 1;
+}
+
+function frequencyLabelFromDays(days) {
+  const d = Math.max(1, Math.round(Number(days) || 1));
+  return d === 1 ? "每天" : `每${d}天`;
+}
+
+function expectedSlotCount(dayCountInclusive, intervalDays) {
+  if (!Number.isFinite(dayCountInclusive) || dayCountInclusive <= 0) return 0;
+  if (!Number.isFinite(intervalDays) || intervalDays <= 1) return dayCountInclusive;
+  return Math.ceil(dayCountInclusive / intervalDays);
+}
+
+function ensureEntryDatesByProject() {
+  if (!data) return;
+  if (derivedUpdatedAt === data.updatedAt) return;
+  derivedUpdatedAt = data.updatedAt;
+  entryDatesByProject = buildEntryDatesByProject(data.entries);
+}
+
+function buildEntryDatesByProject(entries) {
+  const map = new Map();
+  for (const [dateIso, byProject] of Object.entries(entries || {})) {
+    if (!byProject || typeof byProject !== "object") continue;
+    for (const projectId of Object.keys(byProject)) {
+      if (!map.has(projectId)) map.set(projectId, []);
+      map.get(projectId).push(dateIso);
+    }
+  }
+  for (const arr of map.values()) arr.sort();
+  return map;
+}
+
+function lastEntryDateIsoBefore(projectId, dateIso) {
+  ensureEntryDatesByProject();
+  const list = entryDatesByProject.get(projectId);
+  if (!list || list.length === 0) return null;
+
+  let lo = 0;
+  let hi = list.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (list[mid] < dateIso) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo > 0 ? list[lo - 1] : null;
+}
+
+function getFrequencyLockInfo(projectId, dateIso) {
+  const proj = PROJECT_BY_ID.get(projectId);
+  if (!proj) return null;
+  const intervalDays = intervalDaysFromFrequencyText(proj.frequencyDays ?? proj.frequency);
+  if (intervalDays <= 1) return null;
+
+  const lastIso = lastEntryDateIsoBefore(projectId, dateIso);
+  if (!lastIso) return null;
+  const diff = diffDaysIso(dateIso, lastIso);
+  if (diff > 0 && diff < intervalDays) {
+    return { lastIso, nextIso: addDaysIso(lastIso, intervalDays), intervalDays };
+  }
+  return null;
 }
 
 function computeAverageScoreForDate(dateIso) {
@@ -844,6 +1040,34 @@ function getDateIsoList(startIso, endIso) {
   const end = parseISODate(endIso);
   const days = Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
   return Array.from({ length: days + 1 }, (_, i) => toISODateString(addDays(start, i)));
+}
+
+function minIso(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  return a <= b ? a : b;
+}
+
+function maxIso(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  return a >= b ? a : b;
+}
+
+function inclusiveDayCount(startIso, endIso) {
+  if (!startIso || !endIso) return 0;
+  const start = parseISODate(startIso);
+  const end = parseISODate(endIso);
+  if (end.getTime() < start.getTime()) return 0;
+  return Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+}
+
+function diffDaysIso(aIso, bIso) {
+  return Math.round((parseISODate(aIso).getTime() - parseISODate(bIso).getTime()) / 86400000);
+}
+
+function addDaysIso(iso, deltaDays) {
+  return toISODateString(addDays(parseISODate(iso), deltaDays));
 }
 
 function clampIso(iso, minIso, maxIso) {
@@ -963,15 +1187,16 @@ function drawLineChart(canvas, values, { min, max, color }) {
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
 
-  const steps = Math.max(1, Math.round(max - min));
+  const span = max - min;
+  const steps = span >= 100 ? 4 : span >= 50 ? 5 : span >= 10 ? 4 : Math.max(1, Math.round(span));
   for (let i = 0; i <= steps; i++) {
-    const v = min + ((max - min) * i) / steps;
-    const y = padT + plotH - ((v - min) / (max - min)) * plotH;
+    const v = min + (span * i) / steps;
+    const y = padT + plotH - ((v - min) / span) * plotH;
     ctx.beginPath();
     ctx.moveTo(padL, y);
     ctx.lineTo(padL + plotW, y);
     ctx.stroke();
-    ctx.fillText(String(v), padL - 8, y);
+    ctx.fillText(String(Math.round(v)), padL - 8, y);
   }
 
   const numeric = values.filter((v) => typeof v === "number" && Number.isFinite(v));
@@ -996,7 +1221,7 @@ function drawLineChart(canvas, values, { min, max, color }) {
       continue;
     }
     const x = padL + (n === 1 ? 0 : (i / (n - 1)) * plotW);
-    const y = padT + plotH - ((v - min) / (max - min)) * plotH;
+    const y = padT + plotH - ((v - min) / span) * plotH;
     if (!started) {
       ctx.moveTo(x, y);
       started = true;
@@ -1012,7 +1237,7 @@ function drawLineChart(canvas, values, { min, max, color }) {
     const v = values[i];
     if (typeof v !== "number" || !Number.isFinite(v)) continue;
     const x = padL + (n === 1 ? 0 : (i / (n - 1)) * plotW);
-    const y = padT + plotH - ((v - min) / (max - min)) * plotH;
+    const y = padT + plotH - ((v - min) / span) * plotH;
     ctx.beginPath();
     ctx.arc(x, y, 2.6, 0, Math.PI * 2);
     ctx.fill();

@@ -2,6 +2,8 @@
 
 一个临时个人使用的打卡网页：从**首次使用当天**开始，到 **2026-01-30** 结束；支持按天/按周查看，状态（满意/一般/不满意/未完成），可加注释与照片（或图片链接）；支持查看**单项目纵向满意度**与**按时间段横向平均满意度**。
 
+当前版本默认起始日为 `2025-12-26`（可在 `app.js` / `functions/api/data.js` 的 `START_DATE_ISO` 修改）。
+
 ## 运行方式
 
 本项目是纯静态页面 + Cloudflare Pages Functions：
@@ -11,10 +13,10 @@
 
 ## 部署到 Cloudflare Pages
 
-1. 创建 Cloudflare Pages 项目，指向本仓库
-2. Build 设置：
+1. 创建 Cloudflare Pages 项目，选择 **Deploy from Git**，指向本仓库
+2. Build 设置（Framework 选 `None`/`No framework`）：
    - Build command：留空
-   - Output directory：`/`（仓库根目录）
+   - Build output directory：填 `.`（发布仓库根目录；如果界面不接受，可试 `./`）
 3. 创建 KV（Workers KV）命名空间（任意名字都行）
 4. Pages 项目 → `Settings` → `Bindings`（或 `Functions`/`KV` 相关入口，界面会随 Cloudflare 更新）→ 添加 **KV Namespace** 绑定：
    - Variable name：`CHECKIN_KV`
@@ -30,8 +32,8 @@
 截图里如果看到 `workers.dev` / `Routes`，那是 **Worker** 项目。这个仓库当前是 **Pages + Functions** 结构（`functions/` 目录），直接 `wrangler deploy` 会报你看到的 “assets directory” 提示。
 
 建议做法：
-- 用 Pages 部署：`npx wrangler pages deploy . --project-name <你的Pages项目名>`
-- 或者在控制台新建一个 Pages 项目并绑定仓库（不需要 `wrangler deploy`）
+- 推荐：用 Pages 的 **Deploy from Git**（不需要 API Token）
+- `wrangler pages deploy` 属于 “Direct Upload”，需要 API Token；不建议放到 Cloudflare 的构建步骤里跑
 
 如果你坚持用 Worker 方式部署，我也可以把项目改成 “Worker + 静态资源(assets) + KV” 的结构（会增加 `wrangler.jsonc` 和 Worker 入口文件）。
 
@@ -54,7 +56,10 @@ node -e "console.log(require('crypto').createHash('sha256').update(process.argv[
 
 ## 自定义项目
 
-编辑 `projects.js` 中的 `DEFAULT_PROJECT_CATEGORIES` 即可。
+编辑 `projects.js` 中的 `DEFAULT_PROJECT_CATEGORIES` 即可：
+
+- `frequencyDays`：频率（天数），例如 `1`/`2`/`7`
+- `quantity`：数量/目标，例如 `一篇`/`1页`/`半小时`
 
 ## 数据备份/迁移
 

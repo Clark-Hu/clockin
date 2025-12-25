@@ -13,6 +13,8 @@
   --bad: #ff5a5f;
   --miss: #9aa3b2;
   --accent: #7aa2ff;
+  --col-project-w: 170px;
+  --col-freq-w: 140px;
 
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", Arial, "Noto Sans CJK SC", "Noto Sans", sans-serif;
@@ -240,7 +242,11 @@ textarea {
 .grid-wrap {
   border: 1px solid var(--border);
   border-radius: 16px;
-  overflow: hidden;
+  overflow: auto;
+  max-height: calc(100vh - 230px);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
   background: rgba(255, 255, 255, 0.04);
 }
 
@@ -280,7 +286,7 @@ textarea {
 }
 
 .table .sticky-col.second {
-  left: 170px;
+  left: var(--col-project-w);
   z-index: 4;
 }
 
@@ -289,13 +295,13 @@ textarea {
 }
 
 .col-project {
-  width: 170px;
-  min-width: 170px;
+  width: var(--col-project-w);
+  min-width: var(--col-project-w);
 }
 
 .col-freq {
-  width: 140px;
-  min-width: 140px;
+  width: var(--col-freq-w);
+  min-width: var(--col-freq-w);
 }
 
 .date-head {
@@ -321,7 +327,29 @@ textarea {
 .project-name {
   display: flex;
   gap: 10px;
-  align-items: center;
+  align-items: flex-start;
+}
+
+.project-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.project-qty {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.freq-main {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.freq-sub {
+  margin-top: 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .project-link {
@@ -473,6 +501,48 @@ textarea {
 @media (min-width: 980px) {
   .stats-layout {
     grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  :root {
+    --col-project-w: 140px;
+    --col-freq-w: 130px;
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+  }
+
+  .tabs {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .toolbar {
+    justify-content: center;
+  }
+
+  .date-nav {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .main {
+    padding: 12px 12px 22px;
+  }
+
+  .date-head {
+    min-width: 92px;
+  }
+
+  .table th,
+  .table td {
+    padding: 8px 8px;
+  }
+
+  .grid-wrap {
+    max-height: calc(100vh - 280px);
   }
 }
 
@@ -652,4 +722,3 @@ textarea {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.02);
 }
-

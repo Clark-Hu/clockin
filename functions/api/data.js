@@ -1,4 +1,5 @@
 const END_DATE_ISO = "2026-01-30";
+const START_DATE_ISO = "2025-12-26";
 const DEFAULT_KEY = "checkin_data_v1";
 
 export async function onRequest(context) {
@@ -44,6 +45,8 @@ export async function onRequest(context) {
   normalized.updatedAt = new Date().toISOString();
   if (!normalized.meta) normalized.meta = {};
   if (!normalized.meta.endDate) normalized.meta.endDate = END_DATE_ISO;
+  if (!normalized.meta.startDate) normalized.meta.startDate = START_DATE_ISO;
+  if (normalized.meta.startDate < START_DATE_ISO) normalized.meta.startDate = START_DATE_ISO;
 
   await kv.put(dataKey, JSON.stringify(normalized));
   return json({ ok: true, updatedAt: normalized.updatedAt }, 200);
@@ -54,7 +57,7 @@ function defaultData() {
   return {
     version: 1,
     meta: {
-      startDate: null,
+      startDate: START_DATE_ISO,
       endDate: END_DATE_ISO,
       createdAt: now,
     },
@@ -68,6 +71,9 @@ function normalize(obj) {
   if (obj.version !== 1) return defaultData();
   if (!obj.meta || typeof obj.meta !== "object") obj.meta = {};
   if (!obj.entries || typeof obj.entries !== "object") obj.entries = {};
+  if (!obj.meta.endDate) obj.meta.endDate = END_DATE_ISO;
+  if (!obj.meta.startDate) obj.meta.startDate = START_DATE_ISO;
+  if (obj.meta.startDate < START_DATE_ISO) obj.meta.startDate = START_DATE_ISO;
   return obj;
 }
 
@@ -88,4 +94,3 @@ function timingSafeEqual(a, b) {
   for (let i = 0; i < a.length; i++) out |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return out === 0;
 }
-
