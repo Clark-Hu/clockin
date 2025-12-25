@@ -15,6 +15,7 @@
   --accent: #7aa2ff;
   --col-project-w: 170px;
   --col-freq-w: 140px;
+  --weekend-rgb: 80 200 220;
 
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", Arial, "Noto Sans CJK SC", "Noto Sans", sans-serif;
@@ -278,6 +279,21 @@ textarea {
   backdrop-filter: blur(14px);
 }
 
+.table thead th.is-weekend {
+  background: linear-gradient(0deg, rgb(var(--weekend-rgb) / 0.14), rgb(var(--weekend-rgb) / 0.14)),
+    rgba(11, 16, 32, 0.82);
+}
+
+.table td.is-weekend {
+  background: linear-gradient(0deg, rgb(var(--weekend-rgb) / 0.05), rgb(var(--weekend-rgb) / 0.05)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.table td.is-weekend .cell-btn.is-weekend {
+  background: rgb(var(--weekend-rgb) / 0.035);
+  border-color: rgb(var(--weekend-rgb) / 0.22);
+}
+
 .table .sticky-col {
   position: sticky;
   left: 0;
@@ -324,10 +340,59 @@ textarea {
   color: rgba(255, 255, 255, 0.9);
 }
 
+.cat-chinese {
+  --cat-rgb: 122 162 255;
+}
+
+.cat-math {
+  --cat-rgb: 29 185 84;
+}
+
+.cat-english {
+  --cat-rgb: 244 196 48;
+}
+
+.cat-other {
+  --cat-rgb: 255 90 95;
+}
+
+.table tr[class*="cat-"] td.sticky-col:not(.sticky-head) {
+  background: linear-gradient(
+      0deg,
+      rgb(var(--cat-rgb, 255 255 255) / 0.12),
+      rgb(var(--cat-rgb, 255 255 255) / 0.12)
+    ),
+    rgba(11, 16, 32, 0.72);
+}
+
+.table tr[class*="cat-"] td.sticky-col.col-project {
+  border-left: 4px solid rgb(var(--cat-rgb, 255 255 255) / 0.9);
+  padding-left: 10px;
+}
+
+.category-row[class*="cat-"] td {
+  background: linear-gradient(
+      0deg,
+      rgb(var(--cat-rgb, 255 255 255) / 0.18),
+      rgb(var(--cat-rgb, 255 255 255) / 0.18)
+    ),
+    rgba(255, 255, 255, 0.04);
+}
+
 .project-name {
   display: flex;
   gap: 10px;
   align-items: flex-start;
+}
+
+.project-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgb(var(--cat-rgb, 255 255 255) / 0.9);
+  box-shadow: 0 0 0 3px rgb(var(--cat-rgb, 255 255 255) / 0.18);
+  flex: 0 0 auto;
+  margin-top: 3px;
 }
 
 .project-text {
@@ -364,6 +429,10 @@ textarea {
 
 .project-link:hover {
   color: var(--accent);
+}
+
+.table tr[class*="cat-"] .project-link:hover {
+  color: rgb(var(--cat-rgb, 255 255 255) / 0.95);
 }
 
 .muted {
@@ -437,6 +506,11 @@ textarea {
 .avg-row td {
   background: rgba(122, 162, 255, 0.06);
   font-weight: 650;
+}
+
+.avg-row td.is-weekend {
+  background: linear-gradient(0deg, rgb(var(--weekend-rgb) / 0.05), rgb(var(--weekend-rgb) / 0.05)),
+    rgba(122, 162, 255, 0.06);
 }
 
 .overlay {

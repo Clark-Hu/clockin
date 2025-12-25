@@ -413,6 +413,8 @@ function renderGrid() {
   for (const d of dateList) {
     const th = document.createElement("th");
     th.className = "date-head";
+    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+    if (isWeekend) th.classList.add("is-weekend");
     const mmdd = `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
     th.textContent = mmdd;
 
@@ -429,7 +431,7 @@ function renderGrid() {
   const tbody = document.createElement("tbody");
   for (const cat of DEFAULT_PROJECT_CATEGORIES) {
     const trCat = document.createElement("tr");
-    trCat.className = "category-row";
+    trCat.className = `category-row cat-${cat.id}`;
     const td = document.createElement("td");
     td.colSpan = 2 + dateList.length;
     td.textContent = cat.name;
@@ -438,11 +440,16 @@ function renderGrid() {
 
     for (const proj of cat.projects) {
       const tr = document.createElement("tr");
+      tr.className = `cat-${cat.id}`;
 
       const tdName = document.createElement("td");
       tdName.className = "sticky-col col-project";
       const nameWrap = document.createElement("div");
       nameWrap.className = "project-name";
+      const dot = document.createElement("span");
+      dot.className = "project-dot";
+      dot.title = cat.name;
+      nameWrap.appendChild(dot);
       const textWrap = document.createElement("div");
       textWrap.className = "project-text";
       const link = document.createElement("button");
@@ -490,6 +497,8 @@ function renderGrid() {
       for (const d of dateList) {
         const tdCell = document.createElement("td");
         const iso = toISODateString(d);
+        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+        if (isWeekend) tdCell.classList.add("is-weekend");
         const inRange = d.getTime() >= startDate.getTime() && d.getTime() <= endDate.getTime();
         const entry = getEntry(iso, proj.id);
         const statusKey = entry?.status || "";
@@ -499,6 +508,7 @@ function renderGrid() {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = `cell-btn ${statusDef?.className || "status-empty"}`;
+        if (isWeekend) btn.classList.add("is-weekend");
         btn.disabled = !inRange || !!lockInfo;
         btn.title = !inRange
           ? "不在范围内"
@@ -538,6 +548,8 @@ function renderGrid() {
     const iso = toISODateString(d);
     const avg = computeAverageScoreForDate(iso);
     const td = document.createElement("td");
+    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+    if (isWeekend) td.classList.add("is-weekend");
     td.textContent = avg == null ? "—" : String(Math.round(avg));
     avgRow.appendChild(td);
   }
