@@ -82,7 +82,10 @@ const elRangeSummary = document.getElementById("rangeSummary");
 const elRangeChart = document.getElementById("rangeChart");
 const elPerProjectAverages = document.getElementById("perProjectAverages");
 
-let viewMode = window.matchMedia?.("(max-width: 720px)")?.matches ? "day" : "week";
+const IS_MOBILE =
+  window.matchMedia?.("(pointer: coarse)")?.matches || window.matchMedia?.("(max-width: 720px)")?.matches || false;
+
+let viewMode = IS_MOBILE ? "day" : "week";
 let focusDateIso = toISODateString(startOfToday());
 let authHash = sessionStorage.getItem(SESSION_AUTH_HASH_KEY) || null;
 let storageMode = "cloud";
@@ -108,12 +111,35 @@ function init() {
   initEditor();
   initSettings();
   initStatsControls();
+  initMobileAutoToday();
 
   if (authHash) {
     loadAll().catch(() => showLogin());
   } else {
     showLogin();
   }
+}
+
+function initMobileAutoToday() {
+  if (!IS_MOBILE) return;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    jumpToToday();
+  });
+  window.addEventListener("focus", () => jumpToToday());
+}
+
+function jumpToToday() {
+  if (!IS_MOBILE) return;
+  const todayIso = toISODateString(startOfToday());
+  const minIsoVal = data?.meta?.startDate || START_DATE_ISO;
+  const maxIsoVal = data?.meta?.endDate || END_DATE_ISO;
+  const nextIso = clampIso(todayIso, minIsoVal, maxIsoVal);
+  const changed = focusDateIso !== nextIso || viewMode !== "day";
+  focusDateIso = nextIso;
+  viewMode = "day";
+  syncViewButtons();
+  if (changed) renderAll();
 }
 
 function initTabs() {
@@ -379,10 +405,21 @@ function renderAll() {
   elFocusDate.max = endIso;
   elFocusDate.value = focusDateIso;
 
-  elSubtitle.textContent = `${startIso} ～ ${endIso} · ${storageMode === "cloud" ? "云端" : "本地"}`;
+  if (IS_MOBILE) {
+    const shortStart = isoToMMDD(startIso);
+    const shortEnd = isoToMMDD(endIso);
+    elSubtitle.textContent = `${shortStart}~${shortEnd} · ${storageMode === "cloud" ? "云端" : "本地"}`;
+  } else {
+    elSubtitle.textContent = `${startIso} ～ ${endIso} · ${storageMode === "cloud" ? "云端" : "本地"}`;
+  }
 
   renderGrid();
   if (!document.getElementById("tab-stats")?.classList.contains("is-hidden")) renderStats();
+}
+
+function isoToMMDD(iso) {
+  if (!iso || iso.length < 10) return iso || "";
+  return iso.slice(5).replace("-", "/");
 }
 
 function renderGrid() {
@@ -488,7 +525,7 @@ function renderGrid() {
       const freqSub = document.createElement("div");
       freqSub.className = "freq-sub";
       freqSub.textContent =
-        expected > 0 ? `该周完成 ${completed}/${expected}（${Math.round((completed / expected) * 100)}%）` : "未开始";
+        expected > 0 ? `${completed}/${expected} ${Math.round((completed / expected) * 100)}%` : "未开始";
 
       tdFreq.appendChild(freqMain);
       tdFreq.appendChild(freqSub);

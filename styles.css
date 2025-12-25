@@ -251,8 +251,14 @@ textarea {
   background: rgba(255, 255, 255, 0.04);
 }
 
+.grid-wrap #gridContainer {
+  width: max-content;
+  min-width: 100%;
+}
+
 .table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
 }
@@ -409,12 +415,14 @@ textarea {
 .freq-main {
   font-size: 11px;
   color: var(--muted);
+  white-space: nowrap;
 }
 
 .freq-sub {
-  margin-top: 4px;
+  margin-top: 3px;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.72);
+  white-space: nowrap;
 }
 
 .project-link {
@@ -580,26 +588,89 @@ textarea {
 
 @media (max-width: 720px) {
   :root {
-    --col-project-w: 140px;
-    --col-freq-w: 130px;
+    --col-project-w: 132px;
+    --col-freq-w: 86px;
   }
 
   .topbar {
     flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .brand {
+    order: 1;
+    flex: 1 1 auto;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .brand-title {
+    font-size: 16px;
+  }
+
+  .brand-subtitle {
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .freq-main,
+  .freq-sub {
+    font-size: 10px;
   }
 
   .tabs {
+    order: 3;
     width: 100%;
     justify-content: center;
+    padding: 3px;
+    gap: 6px;
+  }
+
+  .tab-btn {
+    padding: 6px 10px;
+    font-size: 14px;
+  }
+
+  #logoutBtn {
+    order: 2;
+    padding: 6px 10px;
   }
 
   .toolbar {
     justify-content: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .save-state {
+    display: none;
+  }
+
+  .segmented-btn {
+    padding: 6px 10px;
+    font-size: 13px;
   }
 
   .date-nav {
     width: 100%;
     justify-content: center;
+    gap: 8px;
+  }
+
+  .date-input {
+    padding: 6px 8px;
+  }
+
+  .ghost-btn {
+    padding: 6px 10px;
+  }
+
+  .icon-btn {
+    padding: 6px 10px;
   }
 
   .main {
@@ -616,7 +687,7 @@ textarea {
   }
 
   .grid-wrap {
-    max-height: calc(100vh - 280px);
+    max-height: calc(100vh - 240px);
   }
 }
 
