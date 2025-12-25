@@ -16,12 +16,24 @@
    - Build command：留空
    - Output directory：`/`（仓库根目录）
 3. 创建 KV（Workers KV）命名空间（任意名字都行）
-4. Pages 项目设置 → Functions → KV namespace bindings：
+4. Pages 项目 → `Settings` → `Bindings`（或 `Functions`/`KV` 相关入口，界面会随 Cloudflare 更新）→ 添加 **KV Namespace** 绑定：
    - Variable name：`CHECKIN_KV`
    - KV namespace：选择你创建的 namespace
-5. Pages 项目设置 → Environment variables（Secrets）：
+5. Pages 项目 → `Settings` → `Variables and Secrets`：
    - `PASSWORD_HASH`：你的密码的 **SHA-256 hex**（下面有生成方法）
    - （可选）`DATA_KEY`：KV 存储 key，默认 `checkin_data_v1`
+
+> 注意：`CHECKIN_KV` 不能用“Plaintext 变量”代替，它必须是 Cloudflare 的 **KV 绑定**（运行时是一个 KV 对象，不是字符串）。
+
+## 如果你部署的是 Worker（workers.dev）而不是 Pages
+
+截图里如果看到 `workers.dev` / `Routes`，那是 **Worker** 项目。这个仓库当前是 **Pages + Functions** 结构（`functions/` 目录），直接 `wrangler deploy` 会报你看到的 “assets directory” 提示。
+
+建议做法：
+- 用 Pages 部署：`npx wrangler pages deploy . --project-name <你的Pages项目名>`
+- 或者在控制台新建一个 Pages 项目并绑定仓库（不需要 `wrangler deploy`）
+
+如果你坚持用 Worker 方式部署，我也可以把项目改成 “Worker + 静态资源(assets) + KV” 的结构（会增加 `wrangler.jsonc` 和 Worker 入口文件）。
 
 ## 生成 PASSWORD_HASH
 
@@ -51,4 +63,3 @@ node -e "console.log(require('crypto').createHash('sha256').update(process.argv[
 ## 照片说明
 
 “选择照片”会在浏览器端压缩后存为 `data:`（Base64）文本，和数据一起存到 KV。建议不要放太多大图；如果想更轻量，可以只填“图片链接”。
-
